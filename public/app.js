@@ -128,6 +128,23 @@ function setPipelineProgress(stepName, percent, title, detail) {
   }
 }
 
+function setPipelineError(errorMsg) {
+  progressTitle.textContent = "Analysis paused";
+  progressDetail.textContent = errorMsg || "A service limit or temporary issue was reached. Tap Summarize to retry.";
+  const kicker = document.querySelector("#progress-kicker");
+  if (kicker) kicker.textContent = "PROCESS PAUSED";
+
+  const activeStep = document.querySelector(".step-item[data-status='active']");
+  if (activeStep) {
+    activeStep.setAttribute("data-status", "error");
+  }
+
+  const pulseCore = document.querySelector(".pulse-core");
+  if (pulseCore) pulseCore.style.background = "#f87171";
+  const pulseRing = document.querySelector(".pulse-ring");
+  if (pulseRing) pulseRing.style.display = "none";
+}
+
 function setBusy(busy) {
   submitButton.disabled = busy;
   submitButton.querySelector("span").textContent = busy ? "Analyzing…" : "Summarize";
@@ -141,6 +158,12 @@ function setBusy(busy) {
     failoverNoticeChip.classList.add("hidden");
     terminalStream.innerHTML = "";
     sessionLogs = [];
+    const pulseCore = document.querySelector(".pulse-core");
+    if (pulseCore) pulseCore.style.background = "#a78bfa";
+    const pulseRing = document.querySelector(".pulse-ring");
+    if (pulseRing) pulseRing.style.display = "";
+    const kicker = document.querySelector("#progress-kicker");
+    if (kicker) kicker.textContent = "LIVE PROGRESS";
     setPipelineProgress("validate", 5, "Checking video link…", "Finding subtitles and preparing analysis.");
   }
 }
@@ -248,6 +271,7 @@ form.addEventListener("submit", async (event) => {
       throw new Error("The process stream closed unexpectedly. Check the execution log for details.");
     }
   } catch (err) {
+    setPipelineError(err.message);
     showError(err.message || "Failed to process video. Please verify link and try again.");
     appendTerminalLog(new Date().toLocaleTimeString(), "error", err.message);
   } finally {
@@ -311,6 +335,7 @@ function handleStreamEvent(type, data, rawUrl) {
       break;
 
     case "error":
+      setPipelineError(data.error);
       showError(data.error || "An error occurred during summarization.");
       break;
   }

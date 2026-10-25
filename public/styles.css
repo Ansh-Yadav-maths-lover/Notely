@@ -518,6 +518,17 @@ button {
   color: #a7f3d0;
 }
 
+.step-item[data-status="error"] .step-node {
+  border-color: #f87171;
+  background: rgba(248, 113, 113, 0.2);
+  box-shadow: 0 0 12px rgba(248, 113, 113, 0.4);
+}
+
+.step-item[data-status="error"] .step-label {
+  color: #fca5a5;
+  font-weight: 700;
+}
+
 /* Engine & Pacing Chips */
 .process-chips-row {
   display: flex;

@@ -272,10 +272,11 @@ async function cerebrasGenerate(prompt, maxOutputTokens = 1800, context = "summa
     body: JSON.stringify({
       model: CEREBRAS_MODEL,
       messages: [
-        { role: "system", content: "You are a careful YouTube transcript summarizer. Use only information supported by the supplied transcript. Do not invent facts." },
+        { role: "system", content: "You are a careful YouTube transcript summarizer. Output structured notes directly without lengthy preamble." },
         { role: "user", content: prompt }
       ],
-      max_completion_tokens: maxOutputTokens,
+      // Allow ample token headroom for reasoning models (e.g. gpt-oss-120b)
+      max_completion_tokens: Math.max(3000, maxOutputTokens + 1200),
       temperature: 0.3
     }),
     signal: AbortSignal.timeout(30000)
@@ -289,7 +290,11 @@ async function cerebrasGenerate(prompt, maxOutputTokens = 1800, context = "summa
     log("warn", `Cerebras request failed (${context})`, `http=${response.status}, elapsedMs=${elapsed}, message=${message}`);
     throw err;
   }
-  const text = String(data.choices?.[0]?.message?.content || "").trim();
+  const choice = data.choices?.[0]?.message;
+  let text = String(choice?.content || "").trim();
+  if (!text && choice?.reasoning) {
+    text = String(choice.reasoning).trim();
+  }
   if (!text) {
     const err = new Error("Cerebras returned an empty response.");
     err.status = 502;
@@ -306,43 +311,63 @@ async function groqGenerate(prompt, maxOutputTokens = 1800, context = "summary")
     err.status = 500;
     throw err;
   }
-  const started = Date.now();
-  log("log", `Groq request started (${context})`, `model=${GROQ_MODEL}, promptChars=${prompt.length}`);
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${GROQ_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: [
-        { role: "system", content: "You are a careful YouTube transcript summarizer. Use only information supported by the supplied transcript. Do not invent facts." },
-        { role: "user", content: prompt }
-      ],
-      max_completion_tokens: maxOutputTokens,
-      temperature: 0.3
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
-  const data = await response.json().catch(() => ({}));
-  const elapsed = Date.now() - started;
-  if (!response.ok) {
-    const message = safeErrorMessage(data, response.status);
-    const err = new Error(message);
-    err.status = response.status;
-    log("warn", `Groq request failed (${context})`, `http=${response.status}, elapsedMs=${elapsed}, message=${message}`);
-    throw err;
+  // If primary Groq model (120b) hits tight TPM rate limits, seamlessly fall back to 20b
+  const models = [GROQ_MODEL, "openai/gpt-oss-20b"].filter((m, i, arr) => arr.indexOf(m) === i);
+  let lastErr;
+
+  for (const model of models) {
+    const started = Date.now();
+    log("log", `Groq request started (${context})`, `model=${model}, promptChars=${prompt.length}`);
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: "You are a careful YouTube transcript summarizer. Output structured notes directly." },
+            { role: "user", content: prompt }
+          ],
+          max_completion_tokens: Math.max(2500, maxOutputTokens + 800),
+          temperature: 0.3
+        }),
+        signal: AbortSignal.timeout(25000)
+      });
+      const data = await response.json().catch(() => ({}));
+      const elapsed = Date.now() - started;
+      if (!response.ok) {
+        const message = safeErrorMessage(data, response.status);
+        lastErr = new Error(message);
+        lastErr.status = response.status;
+        log("warn", `Groq model ${model} failed (${context})`, `http=${response.status}, elapsedMs=${elapsed}, message=${message}`);
+        if (response.status === 429 && model !== models[models.length - 1]) {
+          log("info", `Groq 120b rate-limited; attempting fast backup model ${models[1]}...`);
+          continue;
+        }
+        throw lastErr;
+      }
+      const choice = data.choices?.[0]?.message;
+      let text = String(choice?.content || "").trim();
+      if (!text && choice?.reasoning) {
+        text = String(choice.reasoning).trim();
+      }
+      if (!text) {
+        throw new Error("Groq returned an empty response.");
+      }
+      log("log", `Groq request succeeded (${context})`, `model=${model}, elapsedMs=${elapsed}, outputChars=${text.length}`);
+      return text;
+    } catch (error) {
+      lastErr = error;
+      if (error.status === 429 && model !== models[models.length - 1]) {
+        continue;
+      }
+      throw error;
+    }
   }
-  const text = String(data.choices?.[0]?.message?.content || "").trim();
-  if (!text) {
-    const err = new Error("Groq returned an empty response.");
-    err.status = 502;
-    log("warn", `Groq returned empty response (${context})`, `elapsedMs=${elapsed}`);
-    throw err;
-  }
-  log("log", `Groq request succeeded (${context})`, `elapsedMs=${elapsed}, outputChars=${text.length}`);
-  return text;
+  throw lastErr;
 }
 
 // Provider order: Cerebras -> Groq -> Gemini. Rate-limited providers are temporarily skipped.
@@ -594,7 +619,7 @@ app.post("/api/summarize", async (req, res) => {
         });
 
         const chunkPrompt = `Summarize part ${i + 1} of ${chunks.length} of a YouTube transcript. Keep important facts, names, definitions, arguments, and timestamp markers. Do not add an introduction or conclusion that is not in this section. Use compact bullet points. This is an intermediate summary, not the final answer.\n\n${chunks[i]}`;
-        const chunkRes = await aiGenerate(chunkPrompt, 800, `request=${requestId}, part ${i + 1}/${chunks.length}`, handleAiProgress);
+        const chunkRes = await aiGenerate(chunkPrompt, 2000, `request=${requestId}, part ${i + 1}/${chunks.length}`, handleAiProgress);
         intermediate.push(chunkRes.text);
       }
 
