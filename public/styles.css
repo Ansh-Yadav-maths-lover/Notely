@@ -126,6 +126,46 @@ button {
   stroke: white;
 }
 
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.creator-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(167, 139, 250, 0.09);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  padding: 5px 11px;
+  border-radius: 20px;
+  color: #dcd7f5;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.creator-badge:hover {
+  background: rgba(167, 139, 250, 0.18);
+  border-color: rgba(167, 139, 250, 0.4);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.creator-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a78bfa, #7c3aed);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: white;
+}
+
 .provider-pill {
   display: flex;
   align-items: center;
@@ -1254,8 +1294,21 @@ footer {
   padding-top: 22px;
   display: flex;
   justify-content: space-between;
-  color: #636578;
+  align-items: center;
+  color: #787a8e;
   font-size: 11px;
+}
+
+.footer-link {
+  color: #c4b5fd;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.footer-link:hover {
+  color: #ffffff;
+  text-decoration: underline;
 }
 
 /* Toast */
@@ -1332,6 +1385,14 @@ footer {
 
 /* Dedicated Smartphone Experience (<= 580px) */
 @media (max-width: 580px) {
+  .creator-name {
+    display: none;
+  }
+  .creator-badge {
+    padding: 4px;
+    border-radius: 50%;
+  }
+
   /* Prevent iOS Safari auto-zoom on input focus */
   .url-row input {
     font-size: 16px;
