@@ -25,7 +25,7 @@ function parseRetryMs(message, headers) {
   const retryAfter = Number(headers?.get?.("retry-after"));
   if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.min(retryAfter * 1000, 24 * 60 * 60 * 1000);
   const text = String(message || "");
-  let match = text.match(/retry in\s+(\d+(?:\.\d+)?)\s*s/i);
+  let match = text.match(/(?:retry|try again)\s+in\s+(\d+(?:\.\d+)?)\s*s/i);
   if (match) return Math.max(5000, Math.ceil(Number(match[1]) * 1000) + 1000);
   match = text.match(/retry in\s+(\d+)h(\d+)m(\d+)s/i);
   if (match) return ((Number(match[1]) * 3600) + (Number(match[2]) * 60) + Number(match[3])) * 1000;
@@ -142,24 +142,37 @@ function formatTimestamp(seconds) {
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-// Keep prompts comfortably below Groq's common free/on-demand TPM request ceiling.
-// 5,500 characters is deliberately conservative for multilingual/Hindi transcripts.
-function splitTranscript(text, maxChars = 5500) {
+// Smart adaptive chunking for videos of any length:
+// Small (<= 22,000 chars, ~20 mins): 1 single pass (instant!)
+// Medium (22,000 - 50,000 chars, ~40 mins): 2 sections
+// Long (50,000 - 95,000 chars, ~80 mins): 3 sections
+// Extra Long (> 95,000 chars, 2+ hours): 4 sections max!
+// This guarantees we never flood AI providers with 10-15 micro-requests,
+// staying comfortably below RPM/TPM limits and finishing within 30-40 seconds.
+function splitTranscript(text) {
+  const len = text.length;
+  if (len <= 22000) {
+    return [text];
+  }
+
+  let numChunks = 2;
+  if (len > 95000) {
+    numChunks = 4;
+  } else if (len > 50000) {
+    numChunks = 3;
+  }
+
+  const targetChars = Math.ceil(len / numChunks);
   const lines = text.split("\n");
   const chunks = [];
   let current = "";
+
   for (const line of lines) {
-    if (current.length + line.length + 1 > maxChars && current) {
+    if (current.length + line.length + 1 > targetChars && current && chunks.length < numChunks - 1) {
       chunks.push(current);
       current = "";
     }
-    // Split a single exceptionally long line safely.
-    if (line.length > maxChars) {
-      if (current) { chunks.push(current); current = ""; }
-      for (let i = 0; i < line.length; i += maxChars) chunks.push(line.slice(i, i + maxChars));
-    } else {
-      current += (current ? "\n" : "") + line;
-    }
+    current += (current ? "\n" : "") + line;
   }
   if (current) chunks.push(current);
   return chunks;
@@ -171,7 +184,7 @@ async function geminiGenerate(prompt, maxOutputTokens = 1800, context = "summary
     err.status = 500; throw err;
   }
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/interactions?key=${encodeURIComponent(GEMINI_API_KEY)}`;
-  const maxAttempts = 4;
+  const maxAttempts = 2;
   let lastError;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -187,7 +200,7 @@ async function geminiGenerate(prompt, maxOutputTokens = 1800, context = "summary
           store: false,
           generation_config: { max_output_tokens: maxOutputTokens, temperature: 0.3 }
         }),
-        signal: AbortSignal.timeout(120000)
+        signal: AbortSignal.timeout(20000)
       });
       const data = await response.json().catch(() => ({}));
       const elapsed = Date.now() - started;
@@ -205,9 +218,9 @@ async function geminiGenerate(prompt, maxOutputTokens = 1800, context = "summary
           log("log", `Gemini request succeeded (${context})`, `attempt=${attempt}, elapsedMs=${elapsed}, outputChars=${text.length}`);
           return text;
         }
-        const err = new Error("Gemini returned an empty response. Try again or choose a shorter summary.");
+        const err = new Error("Gemini returned an empty response.");
         err.status = 502;
-        log("error", `Gemini returned an empty response (${context})`, `elapsedMs=${elapsed}, responseKeys=${Object.keys(data).join(",")}`);
+        log("error", `Gemini returned an empty response (${context})`, `elapsedMs=${elapsed}`);
         throw err;
       }
 
@@ -220,7 +233,7 @@ async function geminiGenerate(prompt, maxOutputTokens = 1800, context = "summary
       log(transient && attempt < maxAttempts ? "warn" : "error", `Gemini request failed (${context})`, `http=${response.status}, attempt=${attempt}/${maxAttempts}, elapsedMs=${elapsed}, message=${message}`);
 
       if (!transient || attempt === maxAttempts) break;
-      const delay = Math.min(parseRetryMs(message, response.headers), 30000);
+      const delay = Math.min(parseRetryMs(message, response.headers), 5000);
       log("warn", `Gemini is temporarily busy; retrying (${context})`, `waitMs=${delay}`);
       await sleep(delay);
     } catch (error) {
@@ -229,18 +242,12 @@ async function geminiGenerate(prompt, maxOutputTokens = 1800, context = "summary
       const transient = error.name === "TimeoutError" || error.name === "AbortError" || error.name === "TypeError";
       log(transient && attempt < maxAttempts ? "warn" : "error", `Gemini network error (${context})`, `attempt=${attempt}/${maxAttempts}, message=${error.message}`);
       if (!transient || attempt === maxAttempts) break;
-      const delay = Math.min(2000 * (2 ** (attempt - 1)), 15000);
-      log("warn", `Retrying Gemini after network error (${context})`, `waitMs=${delay}`);
-      await sleep(delay);
+      await sleep(2000);
     }
   }
 
   if (lastError) {
     if (!lastError.status) lastError.status = 503;
-    if (/high demand|temporar|overload|try again later/i.test(lastError.message) && lastError.status !== 429) {
-      lastError.message = `Gemini is temporarily overloaded. Details: ${lastError.message}`;
-      lastError.status = 503;
-    }
     throw lastError;
   }
   const err = new Error("Gemini request failed without returning a response.");
@@ -271,7 +278,7 @@ async function cerebrasGenerate(prompt, maxOutputTokens = 1800, context = "summa
       max_completion_tokens: maxOutputTokens,
       temperature: 0.3
     }),
-    signal: AbortSignal.timeout(90000)
+    signal: AbortSignal.timeout(30000)
   });
   const data = await response.json().catch(() => ({}));
   const elapsed = Date.now() - started;
@@ -316,7 +323,7 @@ async function groqGenerate(prompt, maxOutputTokens = 1800, context = "summary")
       max_completion_tokens: maxOutputTokens,
       temperature: 0.3
     }),
-    signal: AbortSignal.timeout(90000)
+    signal: AbortSignal.timeout(30000)
   });
   const data = await response.json().catch(() => ({}));
   const elapsed = Date.now() - started;
@@ -557,7 +564,7 @@ app.post("/api/summarize", async (req, res) => {
       for (let i = 0; i < chunks.length; i++) {
         if (isClientAborted || res.writableEnded) break;
         if (i > 0) {
-          const gapMs = Number(process.env.AI_CHUNK_DELAY_MS || 10000);
+          const gapMs = Number(process.env.AI_CHUNK_DELAY_MS || 4000);
           const gapSec = Math.round(gapMs / 1000);
           emitLog("info", `Preparing to read section ${i + 1} of ${chunks.length}...`);
           sendEvent("status", {
