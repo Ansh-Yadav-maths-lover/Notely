@@ -656,12 +656,16 @@ app.post("/api/summarize", async (req, res) => {
 
 app.get("*", (_req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
-app.listen(PORT, () => {
-  log("log", `YT Summary Studio running at http://localhost:${PORT}`);
-  log("log", `AI configuration`, `primary=${CEREBRAS_API_KEY ? `Cerebras (${CEREBRAS_MODEL})` : GROQ_API_KEY ? `Groq (${GROQ_MODEL})` : `Gemini (${GEMINI_MODEL})`}, cerebrasApiKey=${Boolean(CEREBRAS_API_KEY)}, groqApiKey=${Boolean(GROQ_API_KEY)}, geminiModel=${GEMINI_MODEL}, geminiApiKey=${Boolean(GEMINI_API_KEY)}, transcriptApiKey=${Boolean(TRANSCRIPT_API_KEY)}`);
-  log("log", `Rate-limit pacing | chunkDelayMs=${Number(process.env.AI_CHUNK_DELAY_MS || 10000)}`);
-  log("log", "Terminal logging enabled. Keep this terminal open to watch transcript and AI requests.");
-  if (!TRANSCRIPT_API_KEY || (!CEREBRAS_API_KEY && !GROQ_API_KEY && !GEMINI_API_KEY)) {
-    log("warn", "Configuration incomplete", "Add TRANSCRIPT_API_KEY and at least one AI provider key to .env. Recommended failover order: Cerebras, Groq, Gemini.");
-  }
-});
+module.exports = app;
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    log("log", `Notely running at http://localhost:${PORT}`);
+    log("log", `AI configuration`, `primary=${CEREBRAS_API_KEY ? `Cerebras (${CEREBRAS_MODEL})` : GROQ_API_KEY ? `Groq (${GROQ_MODEL})` : `Gemini (${GEMINI_MODEL})`}, cerebrasApiKey=${Boolean(CEREBRAS_API_KEY)}, groqApiKey=${Boolean(GROQ_API_KEY)}, geminiModel=${GEMINI_MODEL}, geminiApiKey=${Boolean(GEMINI_API_KEY)}, transcriptApiKey=${Boolean(TRANSCRIPT_API_KEY)}`);
+    log("log", `Rate-limit pacing | chunkDelayMs=${Number(process.env.AI_CHUNK_DELAY_MS || 10000)}`);
+    log("log", "Terminal logging enabled. Keep this terminal open to watch transcript and AI requests.");
+    if (!TRANSCRIPT_API_KEY || (!CEREBRAS_API_KEY && !GROQ_API_KEY && !GEMINI_API_KEY)) {
+      log("warn", "Configuration incomplete", "Add TRANSCRIPT_API_KEY and at least one AI provider key to .env. Recommended failover order: Cerebras, Groq, Gemini.");
+    }
+  });
+}
