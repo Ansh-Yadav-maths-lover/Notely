@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101116">
+  <meta name="description" content="Turn YouTube videos into clear summaries, study notes, and key takeaways with live process tracking.">
+  <title>Notely · Professional AI Video Notes &amp; Summaries</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/vendor/marked.umd.js"></script>
+  <script src="/vendor/purify.min.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Notely home">
+      <span class="brand-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.8A2.8 2.8 0 0 1 7.8 2h8.4A2.8 2.8 0 0 1 19 4.8v14.4a2.8 2.8 0 0 1-2.8 2.8H7.8A2.8 2.8 0 0 1 5 19.2z"/><path d="m10 8 5 4-5 4z"/></svg></span>
+      <span>Notely<span class="brand-light">.ai</span></span>
+    </a>
+    <div class="topbar-right">
+      <span class="provider-pill" id="topbar-provider-status">
+        <span class="status-dot"></span>
+        <span id="topbar-provider-label">AI Engine Ready</span>
+      </span>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="eyebrow"><span class="eyebrow-line"></span> WATCH LESS. UNDERSTAND MORE.</div>
+      <h1>Your videos,<br><span>structured & Flawless.</span></h1>
+      <p class="hero-copy">Turn long YouTube videos into clear, executive summaries, structured tables, and study notes with real-time process visibility.</p>
+    </section>
+
+    <section class="input-card">
+      <form id="summarize-form">
+        <label class="field-label" for="video-url">YouTube video link</label>
+        <div class="url-row">
+          <span class="url-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 7.2a2.7 2.7 0 0 0-1.9-1.9C17.9 4.8 12 4.8 12 4.8s-5.9 0-7.6.5a2.7 2.7 0 0 0-1.9 1.9A28 28 0 0 0 2 12a28 28 0 0 0 .5 4.8 2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.6.5 7.6.5s5.9 0 7.6-.5a2.7 2.7 0 0 0 1.9-1.9A28 28 0 0 0 22 12a28 28 0 0 0-.5-4.8Z"/><path d="m10 9 5 3-5 3z"/></svg></span>
+          <input id="video-url" name="url" type="url" placeholder="https://www.youtube.com/watch?v=..." required autocomplete="url">
+          <button class="submit-button" id="submit-button" type="submit"><span>Summarize</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+        </div>
+        <div class="options-row">
+          <div class="option-group">
+            <label for="summary-style">Summary style</label>
+            <select id="summary-style" name="style">
+              <option value="detailed">Detailed breakdown (Structured tables & headings)</option>
+              <option value="study">Study notes (Key concepts & entity tables)</option>
+              <option value="concise">Quick summary (Key bullets + TL;DR)</option>
+              <option value="action">Action items (Checklists & recommendations)</option>
+            </select>
+          </div>
+          <div class="option-group language-option">
+            <label for="summary-language">Output language</label>
+            <select id="summary-language" name="language">
+              <option>Same as transcript</option><option>English</option><option>Hindi</option><option>Hinglish</option><option>Spanish</option><option>French</option><option>German</option>
+            </select>
+          </div>
+        </div>
+      </form>
+      <div class="trust-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.7-3 8-7 10-4-2-7-5.3-7-10V6z"/><path d="m9 12 2 2 4-4"/></svg> Rate-limit aware cascade · Cerebras ⚡ Groq ⚡ Gemini · No keys needed in browser</div>
+    </section>
+
+    <!-- LIVE PROGRESS MONITOR (Friendly, clear, approachable) -->
+    <section id="progress" class="live-process-card hidden" aria-live="polite">
+      <div class="process-header">
+        <div class="process-title-group">
+          <div class="process-indicator">
+            <span class="pulse-ring"></span>
+            <span class="pulse-core"></span>
+          </div>
+          <div>
+            <div class="process-kicker" id="progress-kicker">LIVE PROGRESS</div>
+            <h3 id="progress-title">Connecting to YouTube video…</h3>
+            <p id="progress-detail">Fetching subtitles and preparing your summary.</p>
+          </div>
+        </div>
+        <div class="process-metric">
+          <span id="progress-percent" class="percent-badge">0%</span>
+        </div>
+      </div>
+
+      <!-- Animated Progress Bar -->
+      <div class="progress-bar-track">
+        <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
+      </div>
+
+      <!-- Friendly 4-Step Pipeline -->
+      <div class="pipeline-stepper">
+        <div class="step-item" id="step-validate" data-status="active">
+          <div class="step-node"><span class="step-icon">🔗</span></div>
+          <div class="step-label">Link Checked</div>
+        </div>
+        <div class="step-connector" id="conn-1"></div>
+        <div class="step-item" id="step-transcript" data-status="idle">
+          <div class="step-node"><span class="step-icon">📝</span></div>
+          <div class="step-label">Subtitles</div>
+        </div>
+        <div class="step-connector" id="conn-2"></div>
+        <div class="step-item" id="step-ai" data-status="idle">
+          <div class="step-node"><span class="step-icon">⚡</span></div>
+          <div class="step-label" id="step-ai-label">Key Ideas</div>
+        </div>
+        <div class="step-connector" id="conn-3"></div>
+        <div class="step-item" id="step-synthesis" data-status="idle">
+          <div class="step-node"><span class="step-icon">✨</span></div>
+          <div class="step-label">Summary</div>
+        </div>
+      </div>
+
+      <!-- Friendly Status Badges -->
+      <div class="process-chips-row">
+        <div class="chip engine-chip" id="active-engine-chip">
+          <span class="chip-dot"></span>
+          <span id="active-engine-text">⚡ Smart AI Analysis</span>
+        </div>
+        <div class="chip pacing-chip hidden" id="pacing-countdown-chip">
+          <span class="chip-hourglass">⏳</span>
+          <span id="pacing-countdown-text">Preparing next section…</span>
+        </div>
+        <div class="chip failover-chip hidden" id="failover-notice-chip">
+          <span class="chip-warn">✨</span>
+          <span id="failover-notice-text">Optimizing analysis model</span>
+        </div>
+      </div>
+
+      <!-- Optional Collapsible Activity Details -->
+      <details class="tech-log-details">
+        <summary class="tech-log-toggle">
+          <span>⚙️ View activity details</span>
+          <span class="tech-log-count" id="log-count">Live</span>
+        </summary>
+        <div class="terminal-box">
+          <div class="terminal-bar">
+            <div class="terminal-dots">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <span class="terminal-title">ACTIVITY STREAM</span>
+            <span class="terminal-badge" id="terminal-step-badge">Active</span>
+          </div>
+          <div class="terminal-stream" id="terminal-stream" role="log" aria-live="polite">
+            <div class="terminal-line info"><span class="terminal-time">[Ready]</span> Initialized session.</div>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- Error Box -->
+    <section id="error-box" class="error-box hidden" role="alert">
+      <span class="error-symbol">!</span>
+      <div>
+        <strong>Couldn't summarize this video</strong>
+        <p id="error-message"></p>
+      </div>
+      <button id="dismiss-error" aria-label="Dismiss error">×</button>
+    </section>
+
+    <!-- RESULTS SECTION -->
+    <section id="result" class="result-section hidden">
+      <!-- Video Metadata Card -->
+      <div class="video-card">
+        <img id="video-thumbnail" src="" alt="Video thumbnail">
+        <div class="video-meta">
+          <span class="result-kicker">VIDEO DETAILS</span>
+          <h2 id="video-title">Video title</h2>
+          <div class="video-submeta">
+            <span id="video-channel"></span>
+            <span id="video-duration"></span>
+            <span id="video-language"></span>
+          </div>
+          <!-- Quick Metadata Metrics -->
+          <div class="meta-metrics-row">
+            <span class="metric-tag" id="read-time-tag">⏱️ 2 min read</span>
+            <span class="metric-tag" id="words-count-tag">📝 0 words</span>
+            <span class="metric-tag" id="engine-tag">⚡ Cerebras</span>
+            <span class="metric-tag" id="chunk-badge">Single pass</span>
+          </div>
+        </div>
+        <a id="open-video" class="open-video" target="_blank" rel="noreferrer" href="#">Watch video ↗</a>
+      </div>
+
+      <!-- Navigation Tabs: Executive Summary / Full Transcript / Process Log -->
+      <div class="view-tabs-row">
+        <div class="tab-buttons">
+          <button class="tab-btn active" id="tab-btn-summary" data-target="view-summary">
+            <span class="tab-icon">✦</span> Executive Summary
+          </button>
+          <button class="tab-btn" id="tab-btn-transcript" data-target="view-transcript">
+            <span class="tab-icon">📝</span> Original Transcript
+          </button>
+          <button class="tab-btn" id="tab-btn-logs" data-target="view-logs">
+            <span class="tab-icon">⚡</span> Execution Stats & Logs
+          </button>
+        </div>
+        <div class="result-actions">
+          <button id="copy-summary" class="secondary-button" title="Copy markdown summary">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+            Copy
+          </button>
+          <button id="download-md" class="secondary-button" title="Export as Markdown .md file">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 20h16"/></svg>
+            Export .md
+          </button>
+          <button id="download-summary" class="secondary-button" title="Export as Plain Text .txt file">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Export .txt
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 1: EXECUTIVE SUMMARY -->
+      <div id="view-summary" class="tab-view active">
+        <div class="summary-card">
+          <div class="summary-card-top">
+            <span class="sparkle">✦</span>
+            <span>STRUCTURED SUMMARY &amp; KEY TAKEAWAYS</span>
+            <span class="summary-time-badge" id="summary-duration-badge"></span>
+          </div>
+          <article id="summary-content" class="markdown-content">
+            <!-- Rendered rich markdown with tables, quotes, bullet points -->
+          </article>
+        </div>
+      </div>
+
+      <!-- TAB 2: ORIGINAL TRANSCRIPT -->
+      <div id="view-transcript" class="tab-view hidden">
+        <div class="transcript-card-panel">
+          <div class="panel-header">
+            <div>
+              <h3>Extracted YouTube Captions</h3>
+              <span id="transcript-count" class="transcript-count"></span>
+            </div>
+            <button id="copy-transcript" class="secondary-button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+              Copy Transcript
+            </button>
+          </div>
+          <pre id="transcript-content"></pre>
+        </div>
+      </div>
+
+      <!-- TAB 3: EXECUTION STATS & LIVE LOGS -->
+      <div id="view-logs" class="tab-view hidden">
+        <div class="stats-card-panel">
+          <div class="panel-header">
+            <div>
+              <h3>Process Execution Breakdown</h3>
+              <p>Transparent report of provider attempts, timestamps, and rate-limit pacing.</p>
+            </div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <span class="stat-label">Total Execution Time</span>
+              <strong class="stat-value" id="stat-total-time">0s</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">AI Engine Employed</span>
+              <strong class="stat-value" id="stat-provider">Cerebras</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Transcript Characters</span>
+              <strong class="stat-value" id="stat-chars">0</strong>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Chunks Processed</span>
+              <strong class="stat-value" id="stat-chunks">1</strong>
+            </div>
+          </div>
+          <div class="panel-subheader">Session Log Replay</div>
+          <div class="session-log-replay" id="session-log-replay"></div>
+        </div>
+      </div>
+
+      <p class="disclaimer">AI-generated summaries can miss nuance or context. Always cross-check the original video for critical claims.</p>
+    </section>
+
+    <section class="features">
+      <div class="feature"><span class="feature-icon purple">✦</span><div><h3>Executive Presentation</h3><p>Tables, key entities, and definitions formatted with high typographic clarity.</p></div></div>
+      <div class="feature"><span class="feature-icon blue">⚡</span><div><h3>Live Process Pipeline</h3><p>Real-time visibility into caption fetching, chunk progress, and API rate limits.</p></div></div>
+      <div class="feature"><span class="feature-icon green">▤</span><div><h3>Multi-Provider Cascade</h3><p>Resilient automatic failover across Cerebras, Groq, and Gemini.</p></div></div>
+    </section>
+    <footer><span>Notely</span><span>Built for clarity, speed, and reliability.</span></footer>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
